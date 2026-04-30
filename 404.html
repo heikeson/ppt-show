@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>404 - 页面未找到</title>
+  <!-- 引入Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- 引入Font Awesome -->
+  <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+  <!-- 引入Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+  
+  <!-- Tailwind配置 -->
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            space: {
+              dark: '#0B0E2D',
+              medium: '#141A46',
+              light: '#1E2965'
+            },
+            star: {
+              default: '#FFFFFF',
+              glow: '#FFFFCC',
+              blue: '#B3D1FF',
+              purple: '#E6CCFF',
+              gold: '#FFD700'
+            }
+          },
+          fontFamily: {
+            inter: ['Inter', 'sans-serif'],
+            'noto-sans': ['"Noto Sans SC"', 'sans-serif']
+          },
+          animation: {
+            'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+            'twinkle': 'twinkle 2s ease-in-out infinite alternate',
+            'float': 'float 6s ease-in-out infinite',
+            'shooting': 'shooting 3s linear forwards',
+            'spin-slow': 'spin 15s linear infinite'
+          },
+          keyframes: {
+            twinkle: {
+              '0%': { opacity: 0.5, transform: 'scale(0.8)' },
+              '100%': { opacity: 1, transform: 'scale(1.2)' }
+            },
+            float: {
+              '0%, 100%': { transform: 'translateY(0)' },
+              '50%': { transform: 'translateY(-20px)' }
+            },
+            shooting: {
+              '0%': { transform: 'translate(0, 0) rotate(-45deg)', opacity: 1 },
+              '100%': { transform: 'translate(200px, 200px) rotate(-45deg)', opacity: 0 }
+            }
+          }
+        }
+      }
+    }
+  </script>
+  
+  <style type="text/tailwindcss">
+    @layer utilities {
+      .content-auto {
+        content-visibility: auto;
+      }
+      .star-glow {
+        box-shadow: 0 0 10px theme('colors.star.default'), 
+                    0 0 20px theme('colors.star.default');
+      }
+      .star-glow-blue {
+        box-shadow: 0 0 10px theme('colors.star.blue'), 
+                    0 0 20px theme('colors.star.blue');
+      }
+      .star-glow-purple {
+        box-shadow: 0 0 10px theme('colors.star.purple'), 
+                    0 0 20px theme('colors.star.purple');
+      }
+      .star-glow-gold {
+        box-shadow: 0 0 15px theme('colors.star.gold'), 
+                    0 0 30px theme('colors.star.gold'),
+                    0 0 45px theme('colors.star.gold');
+      }
+      .text-shadow {
+        text-shadow: 0 0 10px rgba(255, 255, 255, 0.7);
+      }
+      .bg-stars {
+        background-image: 
+          radial-gradient(2px 2px at 20px 30px, #fff, rgba(0,0,0,0)),
+          radial-gradient(2px 2px at 40px 70px, #fff, rgba(0,0,0,0)),
+          radial-gradient(2px 2px at 50px 160px, #fff, rgba(0,0,0,0)),
+          radial-gradient(2px 2px at 90px 40px, #fff, rgba(0,0,0,0)),
+          radial-gradient(2px 2px at 130px 80px, #fff, rgba(0,0,0,0)),
+          radial-gradient(2px 2px at 160px 120px, #fff, rgba(0,0,0,0));
+        background-repeat: repeat;
+        background-size: 200px 200px;
+      }
+      .game-overlay {
+        backdrop-filter: blur(5px);
+      }
+      /* 确保星星在顶层显示 */
+      .star-foreground {
+        z-index: 15;
+        pointer-events: auto; /* 确保星星可以被点击 */
+      }
+      /* 防止文字被选中 */
+      .no-select {
+        user-select: none;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+      }
+      /* 文字容器设置较低的z-index，且不阻挡点击 */
+      .text-container {
+        z-index: 10;
+        pointer-events: none; /* 文字区域不阻挡点击 */
+      }
+      /* 链接和按钮需要可点击 */
+      .text-container a, .text-container button {
+        pointer-events: auto;
+      }
+    }
+  </style>
+</head>
+
+<body class="font-inter bg-space-dark min-h-screen overflow-x-hidden text-white flex flex-col items-center justify-center p-4 relative no-select">
+  <!-- 星空背景 -->
+  <div id="stars" class="absolute inset-0 bg-stars z-0"></div>
+  
+  <!-- 游戏分数面板 -->
+  <div class="absolute top-4 left-4 md:top-8 md:left-8 z-20 bg-space-medium/70 backdrop-blur-sm px-4 py-2 rounded-lg flex items-center">
+    <i class="fa fa-trophy text-star-gold mr-2"></i>
+    <span class="font-noto-sans">分数: <span id="score" class="font-bold ml-1">0</span></span>
+  </div>
+  
+  <!-- 游戏控制按钮 -->
+  <div class="absolute top-4 right-4 md:top-8 md:right-8 z-20 flex space-x-2">
+    <button id="startGame" class="bg-space-medium/70 backdrop-blur-sm px-4 py-2 rounded-lg flex items-center hover:bg-space-light/70 transition-colors">
+      <i class="fa fa-play mr-2"></i>
+      <span class="font-noto-sans">开始游戏</span>
+    </button>
+    <button id="gameInstructions" class="bg-space-medium/70 backdrop-blur-sm px-4 py-2 rounded-lg flex items-center hover:bg-space-light/70 transition-colors">
+      <i class="fa fa-info-circle mr-2"></i>
+    </button>
+  </div>
+  
+  <!-- 404主内容 - 添加text-container类确保不阻挡星星点击 -->
+  <div class="container mx-auto text-center text-container max-w-4xl">
+    <h1 class="text-[clamp(8rem,20vw,16rem)] font-bold mb-6 tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-star-blue via-star-default to-star-purple animate-pulse-slow">404</h1>
+    
+    <h2 class="text-[clamp(1.5rem,3vw,2.5rem)] font-medium mb-6 font-noto-sans">页面好像消失在宇宙中了</h2>
+    
+    <p class="text-gray-300 text-[clamp(1rem,2vw,1.25rem)] mb-10 max-w-2xl mx-auto font-noto-sans">
+      您请求的页面不存在或已被移动。在返回首页前，不如来玩个小游戏放松一下吧！
+    </p>
+    
+    <a href="/" class="inline-flex items-center justify-center px-8 py-3 bg-gradient-to-r from-space-light to-space-medium rounded-full text-white font-medium text-lg hover:shadow-lg hover:shadow-space-light/20 transition-all duration-300 transform hover:-translate-y-1">
+      <i class="fa fa-home mr-2"></i> 返回首页
+    </a>
+    
+    <!-- 游戏区域提示 -->
+    <div class="mt-8 text-gray-400 text-sm font-noto-sans">
+      <p><i class="fa fa-hand-pointer-o mr-1"></i> 点击上方"开始游戏"按钮，点击移动的金色星星得分，它们会越来越快哦！</p>
+    </div>
+  </div>
+  
+  <!-- 漂浮的行星装饰 (确保在星星下方) -->
+  <div class="absolute top-1/4 left-1/6 w-20 h-20 rounded-full bg-space-light opacity-60 animate-float hidden md:block z-5"></div>
+  <div class="absolute bottom-1/3 right-1/5 w-16 h-16 rounded-full bg-space-medium opacity-70 animate-float animation-delay-1000 hidden md:block z-5"></div>
+  <div class="absolute top-1/2 right-1/4 w-12 h-12 rounded-full bg-space-light opacity-50 animate-float animation-delay-2000 hidden lg:block z-5"></div>
+  
+  <!-- 游戏说明弹窗 -->
+  <div id="instructionsModal" class="fixed inset-0 z-50 flex items-center justify-center hidden">
+    <div class="absolute inset-0 bg-black/70 game-overlay" id="modalOverlay"></div>
+    <div class="bg-space-medium rounded-xl p-6 max-w-md w-full mx-4 z-10 relative">
+      <h3 class="text-xl font-bold mb-4 text-center">捕捉星星游戏</h3>
+      <ul class="list-disc pl-5 space-y-2 font-noto-sans text-gray-300">
+        <li>点击屏幕上移动的金色星星得分</li>
+        <li>每点击一个星星得10分</li>
+        <li>随着分数增加，星星会移动得更快</li>
+        <li>错过5个星星游戏结束</li>
+      </ul>
+      <div class="mt-6 text-center">
+        <button id="closeInstructions" class="px-4 py-2 bg-space-light rounded-lg hover:bg-space-light/80 transition-colors">
+          明白了
+        </button>
+      </div>
+    </div>
+  </div>
+  
+  <!-- 游戏结束弹窗 -->
+  <div id="gameOverModal" class="fixed inset-0 z-50 flex items-center justify-center hidden">
+    <div class="absolute inset-0 bg-black/70 game-overlay" id="gameOverOverlay"></div>
+    <div class="bg-space-medium rounded-xl p-6 max-w-md w-full mx-4 z-10 relative text-center">
+      <h3 class="text-2xl font-bold mb-2 text-star-gold">游戏结束</h3>
+      <p class="mb-4 font-noto-sans">你的最终得分: <span id="finalScore" class="font-bold text-xl">0</span></p>
+      <button id="restartGame" class="px-6 py-3 bg-gradient-to-r from-star-gold/20 to-star-gold/40 rounded-lg hover:opacity-90 transition-all">
+        再玩一次
+      </button>
+    </div>
+  </div>
+  
+  <script>
+    // 游戏状态变量
+    let score = 0;
+    let missedStars = 0;
+    let gameSpeed = 3000; // 星星移动时间，毫秒
+    let gameActive = false; // 游戏默认不激活
+    const maxMissed = 5;
+    const boundaryMargin = 10; // 边界margin百分比，防止星星生成在屏幕边缘
+    
+    // DOM 元素
+    const scoreElement = document.getElementById('score');
+    const starsContainer = document.getElementById('stars');
+    const instructionsModal = document.getElementById('instructionsModal');
+    const gameOverModal = document.getElementById('gameOverModal');
+    const finalScoreElement = document.getElementById('finalScore');
+    const startGameButton = document.getElementById('startGame');
+    
+    // 创建背景星星
+    function createBackgroundStars() {
+      const starCount = window.innerWidth < 768 ? 50 : 150;
+      
+      for (let i = 0; i < starCount; i++) {
+        const star = document.createElement('div');
+        
+        // 增大背景星星尺寸（原2-6px，现在3-8px）
+        const size = Math.random() * 5 + 3;
+        
+        // 随机位置，避开边界
+        const x = boundaryMargin + Math.random() * (100 - boundaryMargin * 2);
+        const y = boundaryMargin + Math.random() * (100 - boundaryMargin * 2);
+        
+        // 随机颜色
+        const colors = ['star-default', 'star-blue', 'star-purple'];
+        const color = colors[Math.floor(Math.random() * colors.length)];
+        
+        // 随机闪烁动画延迟
+        const delay = Math.random() * 5;
+        
+        // 设置星星样式 - 确保背景星星在游戏星星下方
+        star.className = `absolute rounded-full ${color === 'star-default' ? 'star-glow' : 
+                          color === 'star-blue' ? 'star-glow-blue' : 'star-glow-purple'} z-10`;
+        star.style.width = `${size}px`;
+        star.style.height = `${size}px`;
+        star.style.left = `${x}%`;
+        star.style.top = `${y}%`;
+        star.style.backgroundColor = `var(--color-${color})`;
+        star.style.animation = `twinkle ${Math.random() * 2 + 1}s ease-in-out infinite alternate`;
+        star.style.animationDelay = `${delay}s`;
+        star.style.opacity = Math.random() * 0.8 + 0.2;
+        star.style.pointerEvents = 'none'; // 防止点击背景星星
+        
+        starsContainer.appendChild(star);
+      }
+    }
+    
+    // 创建可点击的游戏星星 - 确保在顶层且尺寸更大
+    function createGameStar() {
+      if (!gameActive) return;
+      
+      const star = document.createElement('div');
+      // 添加star-foreground类确保在顶层
+      star.classList.add('absolute', 'rounded-full', 'star-glow-gold', 'bg-star-gold', 'star-foreground', 'cursor-pointer');
+      
+      // 显著增大游戏星星尺寸（原12-20px，现在18-28px）
+      const size = Math.random() * 10 + 18;
+      star.style.width = `${size}px`;
+      star.style.height = `${size}px`;
+      
+      // 随机起始位置（全屏幕范围，避开边界）
+      const startX = boundaryMargin + Math.random() * (100 - boundaryMargin * 2);
+      const startY = boundaryMargin + Math.random() * (100 - boundaryMargin * 2);
+      star.style.left = `${startX}%`;
+      star.style.top = `${startY}%`;
+      
+      // 随机目标位置（全屏幕范围，避开边界）
+      const endX = boundaryMargin + Math.random() * (100 - boundaryMargin * 2);
+      const endY = boundaryMargin + Math.random() * (100 - boundaryMargin * 2);
+      
+      // 添加到容器
+      starsContainer.appendChild(star);
+      
+      // 星星移动动画
+      const animation = star.animate([
+        { transform: 'translate(0, 0)' },
+        { transform: `translate(${endX - startX}%, ${endY - startY}%)` }
+      ], {
+        duration: gameSpeed,
+        easing: 'linear'
+      });
+      
+      // 点击星星事件
+      star.addEventListener('click', () => {
+        // 防止重复点击
+        if (star.classList.contains('clicked')) return;
+        star.classList.add('clicked');
+        
+        // 加分
+        score += 10;
+        scoreElement.textContent = score;
+        
+        // 加快游戏速度
+        if (score % 50 === 0 && gameSpeed > 1000) {
+          gameSpeed -= 200;
+        }
+        
+        // 星星爆炸效果 - 增大爆炸粒子尺寸（原3-9px，现在5-12px）
+        createStarBurst(parseFloat(star.style.left), parseFloat(star.style.top));
+        
+        // 停止动画并移除星星
+        animation.cancel();
+        star.remove();
+        
+        // 延迟生成下一个星星
+        setTimeout(createGameStar, 500);
+      });
+      
+      // 动画结束（星星逃脱）
+      animation.onfinish = () => {
+        if (!star.classList.contains('clicked')) {
+          // 星星逃脱，增加错过计数
+          missedStars++;
+          
+          // 显示错过效果
+          star.animate([
+            { opacity: 1 },
+            { opacity: 0 }
+          ], {
+            duration: 300
+          });
+          
+          // 检查游戏是否结束
+          if (missedStars >= maxMissed) {
+            endGame();
+          }
+        }
+        
+        star.remove();
+        
+        // 生成下一个星星
+        setTimeout(createGameStar, 300);
+      };
+    }
+    
+    // 创建星星爆炸效果 - 确保在顶层且粒子更大
+    function createStarBurst(x, y) {
+      for (let i = 0; i < 8; i++) {
+        const burstStar = document.createElement('div');
+        // 增大爆炸粒子尺寸
+        const size = Math.random() * 7 + 5;
+        const angle = (i * 45) * (Math.PI / 180);
+        const distance = Math.random() * 40 + 20;
+        
+        // 确保爆炸效果在顶层
+        burstStar.className = 'absolute rounded-full star-glow-gold bg-star-gold star-foreground';
+        burstStar.style.width = `${size}px`;
+        burstStar.style.height = `${size}px`;
+        burstStar.style.left = `${x}%`;
+        burstStar.style.top = `${y}%`;
+        
+        // 爆炸动画
+        const animation = burstStar.animate([
+          { transform: 'translate(0, 0)', opacity: 1 },
+          { transform: `translate(${Math.cos(angle) * distance}px, ${Math.sin(angle) * distance}px)`, opacity: 0 }
+        ], {
+          duration: 600,
+          easing: 'cubic-bezier(0.1, 0.8, 0.9, 1)'
+        });
+        
+        starsContainer.appendChild(burstStar);
+        
+        // 动画结束后移除
+        animation.onfinish = () => {
+          burstStar.remove();
+        };
+      }
+    }
+    
+    // 随机生成流星 - 确保在顶层且更明显
+    function createShootingStar() {
+      if (!gameActive) return;
+      
+      const shootingStar = document.createElement('div');
+      
+      // 随机位置（避开边界）
+      const x = boundaryMargin + Math.random() * (30 - boundaryMargin);
+      const y = boundaryMargin + Math.random() * (100 - boundaryMargin * 2);
+      
+      // 确保流星在顶层且更粗更明显（原2px，现在3px）
+      shootingStar.className = 'absolute w-3 h-3 bg-star-glow star-glow star-foreground';
+      shootingStar.style.left = `${x}%`;
+      shootingStar.style.top = `${y}%`;
+      shootingStar.style.animation = 'shooting 3s linear forwards';
+      
+      starsContainer.appendChild(shootingStar);
+      
+      // 动画结束后移除
+      setTimeout(() => {
+        shootingStar.remove();
+      }, 3000);
+    }
+    
+    // 开始游戏
+    function startGame() {
+      if (gameActive) return;
+      
+      gameActive = true;
+      startGameButton.innerHTML = '<i class="fa fa-pause mr-2"></i><span class="font-noto-sans">暂停游戏</span>';
+      
+      // 开始生成游戏星星
+      createGameStar();
+      
+      // 定时生成流星
+      setInterval(createShootingStar, 5000);
+      
+      // 初始生成一个流星
+      setTimeout(createShootingStar, 2000);
+    }
+    
+    // 暂停游戏
+    function pauseGame() {
+      if (!gameActive) return;
+      
+      gameActive = false;
+      startGameButton.innerHTML = '<i class="fa fa-play mr-2"></i><span class="font-noto-sans">继续游戏</span>';
+      
+      // 清除所有游戏星星
+      document.querySelectorAll('.star-glow-gold').forEach(star => {
+        star.remove();
+      });
+    }
+    
+    // 结束游戏
+    function endGame() {
+      gameActive = false;
+      finalScoreElement.textContent = score;
+      gameOverModal.classList.remove('hidden');
+      startGameButton.innerHTML = '<i class="fa fa-play mr-2"></i><span class="font-noto-sans">开始游戏</span>';
+    }
+    
+    // 重置游戏
+    function resetGame() {
+      score = 0;
+      missedStars = 0;
+      gameSpeed = 3000;
+      gameActive = true;
+      
+      scoreElement.textContent = score;
+      gameOverModal.classList.add('hidden');
+      startGameButton.innerHTML = '<i class="fa fa-pause mr-2"></i><span class="font-noto-sans">暂停游戏</span>';
+      
+      // 清除所有游戏星星
+      document.querySelectorAll('.star-glow-gold').forEach(star => {
+        star.remove();
+      });
+      
+      // 开始新游戏
+      setTimeout(createGameStar, 500);
+    }
+    
+    // 初始化
+    window.addEventListener('load', () => {
+      createBackgroundStars();
+    });
+    
+    // 窗口大小改变时重新生成背景星星
+    window.addEventListener('resize', () => {
+      // 保留游戏星星，只清除背景星星
+      const gameStars = document.querySelectorAll('.star-glow-gold');
+      const gameStarsArray = Array.from(gameStars);
+      
+      starsContainer.innerHTML = '';
+      
+      // 重新添加游戏星星
+      gameStarsArray.forEach(star => {
+        starsContainer.appendChild(star);
+      });
+      
+      createBackgroundStars();
+    });
+    
+    // 事件监听
+    document.getElementById('closeInstructions').addEventListener('click', () => {
+      instructionsModal.classList.add('hidden');
+    });
+    
+    document.getElementById('modalOverlay').addEventListener('click', () => {
+      instructionsModal.classList.add('hidden');
+    });
+    
+    document.getElementById('gameOverOverlay').addEventListener('click', resetGame);
+    document.getElementById('restartGame').addEventListener('click', resetGame);
+    document.getElementById('gameInstructions').addEventListener('click', () => {
+      instructionsModal.classList.remove('hidden');
+    });
+    
+    // 开始/暂停游戏按钮事件
+    document.getElementById('startGame').addEventListener('click', () => {
+      if (gameActive) {
+        pauseGame();
+      } else {
+        startGame();
+      }
+    });
+  </script>
+</body>
+</html>
+    

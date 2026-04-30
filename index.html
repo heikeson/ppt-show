@@ -1,0 +1,1255 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta name="version" content="v10.0">
+    <meta name="author" content="heikeson">
+    <meta name="description" content="PPT SHOW 是一个基于 Web 技术的 PPT 展示工具，支持从 URL 加载 PPT 并在浏览器中展示，支持视频播放、实时批注、手势滑动及沉浸模式。">
+    
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>PPT SHOW - 互动展示系统</title>
+    
+    <!-- 使用官方 CDN 确保极速加载 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://static.heikeson.com/static/fontawesome/css/all.min.css" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#3B82F6',
+                        secondary: '#10B981',
+                        accent: '#F59E0B',
+                        dark: '#1F2937',
+                        brush1: '#FF0000',
+                        brush2: '#3B82F6',
+                        brush3: '#10B981',
+                        brush4: '#ffffff',
+                    },
+                    fontFamily: {
+                        inter: ['Inter', 'sans-serif'],
+                        'noto-sans': ['"Noto Sans SC"', 'sans-serif'],
+                    },
+                    transitionProperty: {
+                        'opacity-fast': 'opacity 0.15s ease-in-out',
+                        'transform': 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .content-auto { content-visibility: auto; }
+            .control-btn {
+                @apply bg-dark/60 hover:bg-dark/80 text-white p-3 rounded-full transition-all duration-300 cursor-pointer shadow-lg backdrop-blur-sm border border-white/10 flex items-center justify-center;
+            }
+            .tool-btn {
+                @apply bg-dark/60 hover:bg-dark/80 text-white p-2 rounded-lg transition-all duration-300 cursor-pointer shadow-lg backdrop-blur-sm border border-white/10 flex items-center justify-center w-11 h-11 flex-shrink-0;
+            }
+            .tool-btn.active {
+                @apply bg-primary text-white border-primary/50 shadow-[0_0_12px_rgba(59,130,246,0.6)];
+            }
+            .tool-btn:disabled {
+                @apply opacity-30 cursor-not-allowed hover:bg-dark/60 shadow-none;
+            }
+            .loading-indicator {
+                @apply absolute inset-0 flex flex-col items-center justify-center bg-[#111]/80 backdrop-blur-md z-20;
+            }
+            .color-option {
+                @apply w-6 h-6 rounded-full cursor-pointer transition-transform duration-200 hover:scale-110 border-2 border-transparent hover:border-white shadow-sm;
+            }
+            .color-option.selected {
+                @apply border-white scale-125 shadow-md ring-2 ring-white/20;
+            }
+            .missing-slide-indicator {
+                @apply absolute inset-0 flex flex-col items-center justify-center bg-[#1a1a1a] z-10 opacity-0 pointer-events-none transition-opacity duration-300;
+            }
+            
+            /* 沉浸式自动隐藏控制类的样式 */
+            .auto-hide {
+                @apply transition-all duration-700 ease-in-out;
+            }
+            body.ui-hidden .auto-hide {
+                @apply opacity-0 pointer-events-none translate-y-4;
+            }
+            body.ui-hidden .auto-hide.left-controls {
+                @apply -translate-x-4 translate-y-0;
+            }
+            body.ui-hidden .auto-hide.right-controls {
+                @apply translate-x-4 translate-y-0;
+            }
+            body.ui-hidden .auto-hide.top-controls {
+                @apply -translate-y-4;
+            }
+
+            .video-play-btn {
+                @apply fixed bottom-28 right-6 bg-red-600 hover:bg-red-700 text-white p-4 rounded-full shadow-[0_0_20px_rgba(220,38,38,0.4)] transition-all duration-300 cursor-pointer z-40 opacity-0 hover:scale-110 pointer-events-none flex items-center justify-center w-16 h-16;
+            }
+            .video-play-btn.visible {
+                @apply opacity-100 pointer-events-auto animate-bounce;
+            }
+            .video-container {
+                @apply fixed inset-0 bg-black/95 flex items-center justify-center z-50 opacity-0 pointer-events-none transition-opacity duration-300 backdrop-blur-lg;
+            }
+            .video-container.active {
+                @apply opacity-100 pointer-events-auto;
+            }
+            
+            /* 更精美的白板网格背景 */
+            .bg-grid {
+                background-color: #f8fafc;
+                background-size: 24px 24px;
+                background-image: 
+                    linear-gradient(to right, rgba(148, 163, 184, 0.15) 1px, transparent 1px),
+                    linear-gradient(to bottom, rgba(148, 163, 184, 0.15) 1px, transparent 1px);
+            }
+            
+            /* 隐藏原生滚动条但允许滚动 */
+            .hide-scrollbar::-webkit-scrollbar {
+                display: none;
+            }
+            .hide-scrollbar {
+                -ms-overflow-style: none;
+                scrollbar-width: none;
+            }
+        }
+        
+        /* 加载动画 */
+        @keyframes chase { 100% { transform: rotate(360deg); } }
+        .sk-chase { width: 45px; height: 45px; position: relative; animation: chase 2s linear infinite; }
+        .sk-chase-dot {
+            width: 30%; height: 30%; background: theme('colors.primary'); position: absolute; border-radius: 50%;
+            animation: chase-dot 1.5s ease-in-out infinite;
+        }
+        .sk-chase-dot:nth-child(1) { top: 0; left: 0; animation-delay: -0.8s; }
+        .sk-chase-dot:nth-child(2) { top: 0; right: 0; animation-delay: -0.6s; }
+        .sk-chase-dot:nth-child(3) { bottom: 0; right: 0; animation-delay: -0.4s; }
+        .sk-chase-dot:nth-child(4) { bottom: 0; left: 0; animation-delay: -1s; }
+        .sk-chase-dot:nth-child(5) { top: 0; left: 0; animation-delay: -1.2s; }
+        .sk-chase-dot:nth-child(6) { top: 0; right: 0; animation-delay: -0.2s; }
+        @keyframes chase-dot { 70%, 100% { transform: rotate(360deg); } }
+
+        .ppt-image-container { position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+        .ppt-image-layer { position: absolute; max-width: 100%; max-height: 100%; object-fit: contain; transition: opacity 0.3s ease-in-out; }
+        .ppt-image-layer.active { opacity: 1; z-index: 1; }
+        .ppt-image-layer.inactive { opacity: 0; z-index: 0; }
+        
+        #blank-canvas {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 5; opacity: 0; pointer-events: none; transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1), transform 0.4s cubic-bezier(0.4, 0, 0.2, 1); transform: scale(0.95);
+        }
+        #blank-canvas.active { opacity: 1; pointer-events: auto; transform: scale(1); }
+        
+        /* 防移动端滑动缩放 */
+        #blank-drawing, #drawing-canvas {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 6; opacity: 0; pointer-events: none; transition: opacity 0.3s ease;
+            touch-action: none; 
+        }
+        #blank-drawing.active { opacity: 1; pointer-events: auto; }
+        #drawing-canvas { z-index: 20; opacity: 1; }
+        #blank-canvas.active ~ #ppt-container #drawing-canvas { opacity: 0; }
+        
+        @keyframes slideUp { from { opacity: 0; transform: translate(-50%, 15px) scale(0.95); } to { opacity: 1; transform: translate(-50%, 0) scale(1); } }
+        @keyframes slideDown { from { opacity: 1; transform: translate(-50%, 0) scale(1); } to { opacity: 0; transform: translate(-50%, 15px) scale(0.95); } }
+        
+        .tool-panel { animation: slideUp 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; transform-origin: bottom center; }
+        .tool-panel.hidden { animation: slideDown 0.2s ease-in forwards; pointer-events: none; }
+        
+        .pulse-on-hover:hover { transform: translateY(-2px) scale(1.05); }
+        .pulse-on-hover:active { transform: translateY(0) scale(0.95); }
+        
+        input[type="range"] { -webkit-appearance: none; height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.2); outline: none; }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none; width: 20px; height: 20px; border-radius: 50%; background: white; border: 3px solid theme('colors.primary'); cursor: pointer; transition: transform 0.1s, box-shadow 0.2s; box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+        }
+        input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.15); box-shadow: 0 3px 8px rgba(0,0,0,0.5); }
+        
+        .thickness-preview { height: 3px; background-color: white; border-radius: 2px; transition: height 0.15s ease; box-shadow: 0 0 3px rgba(0,0,0,0.5); }
+        .eraser-preview { height: 10px; background-color: rgba(255, 255, 255, 0.1); border: 2px dashed rgba(255, 255, 255, 0.9); border-radius: 50%; transition: all 0.15s ease; }
+    </style>
+</head>
+<body class="bg-[#0a0a0a] overflow-hidden h-screen w-screen m-0 p-0 font-noto-sans selection:bg-primary/30">
+    
+    <!-- 空白画板容器 (内置精美网格) -->
+    <div id="blank-canvas" class="bg-grid shadow-[inset_0_0_50px_rgba(0,0,0,0.05)]" aria-label="空白画板"></div>
+    <!-- 高清绘制层 -->
+    <canvas id="blank-drawing" aria-hidden="true"></canvas>
+    
+    <!-- 视频播放悬浮按钮 -->
+    <button id="video-play-btn" class="video-play-btn pulse-on-hover auto-hide" aria-label="播放视频" title="播放当前页视频 (V)">
+        <i class="fa fa-play text-2xl ml-1"></i>
+    </button>
+    <div id="video-container" class="video-container">
+        <video id="video-player" class="max-w-[90%] max-h-[90%] rounded-xl shadow-[0_0_50px_rgba(0,0,0,0.5)]" controls></video>
+        <button id="close-video" class="absolute top-8 right-8 w-14 h-14 bg-white/10 hover:bg-white/20 hover:rotate-90 rounded-full text-white text-2xl cursor-pointer transition-all flex items-center justify-center backdrop-blur-md border border-white/10 shadow-lg" aria-label="关闭视频" title="关闭 (Esc)">
+            <i class="fa fa-times"></i>
+        </button>
+    </div>
+    
+    <!-- 高级配置面板 -->
+    <div id="config-panel" class="fixed top-6 right-6 z-50 bg-dark/95 border border-white/10 text-white rounded-2xl p-5 backdrop-blur-xl shadow-2xl transition-all duration-300 opacity-0 translate-y-2 pointer-events-none w-80">
+        <div class="flex items-center gap-3 mb-5 border-b border-white/10 pb-3">
+            <div class="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
+                <i class="fa fa-cog text-primary animate-spin-slow"></i>
+            </div>
+            <h3 class="text-base font-semibold font-inter tracking-wide">系统与资源配置</h3>
+        </div>
+        <div class="space-y-5 text-sm">
+            <div class="flex flex-col gap-2">
+                <label class="text-gray-400 text-xs font-semibold uppercase tracking-wider">远端资源路径 URL</label>
+                <input 
+                    type="text" 
+                    id="image-path" 
+                    value="https://example.com/ppt-imgs/" 
+                    class="bg-black/60 border border-gray-600 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
+                    placeholder="例如: https://server.com/ppt/"
+                >
+            </div>
+            <div class="flex flex-col gap-2">
+                <label class="text-gray-400 text-xs font-semibold uppercase tracking-wider">内存预加载策略</label>
+                <select id="preload-count" class="bg-black/60 border border-gray-600 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-primary transition-colors">
+                    <option value="2">极速模式 (省内存, 前后2页)</option>
+                    <option value="3" selected>均衡模式 (推荐, 前后3页)</option>
+                    <option value="5">激进模式 (防卡顿, 前后5页)</option>
+                </select>
+            </div>
+            <button id="save-config" class="w-full bg-primary hover:bg-blue-600 text-white font-semibold py-2.5 rounded-lg transition-all pulse-on-hover shadow-[0_4px_14px_0_rgba(59,130,246,0.39)] mt-2">
+                应用并重载资源
+            </button>
+        </div>
+    </div>
+
+    <!-- 画笔参数面板 -->
+    <div id="brush-panel" class="fixed bottom-24 left-1/2 -translate-x-1/2 z-30 bg-dark/95 backdrop-blur-xl border border-white/10 rounded-2xl p-5 shadow-[0_10px_40px_rgba(0,0,0,0.5)] tool-panel hidden min-w-[280px]">
+        <div id="color-selection" class="mb-5">
+            <p class="text-xs font-semibold text-gray-400 mb-3 uppercase tracking-wider">选择墨迹颜色</p>
+            <div class="flex gap-4 justify-center items-center bg-black/30 p-2 rounded-xl">
+                <div class="color-option selected" data-color="#FF0000" style="background-color: #FF0000;" title="批注红"></div>
+                <div class="color-option" data-color="#3B82F6" style="background-color: #3B82F6;" title="重点蓝"></div>
+                <div class="color-option" data-color="#10B981" style="background-color: #10B981;" title="通过绿"></div>
+                <div class="color-option" data-color="#F59E0B" style="background-color: #F59E0B;" title="警示黄"></div>
+                <div class="color-option border border-gray-600" data-color="#ffffff" style="background-color: #ffffff;" title="纯白"></div>
+                <div class="h-6 w-[1px] bg-gray-600 mx-1"></div>
+                <div class="relative w-8 h-8 rounded-full overflow-hidden border-2 border-transparent hover:border-white transition-transform hover:scale-110 cursor-pointer shadow-sm">
+                    <input type="color" id="custom-brush-color" value="#FF0000" class="absolute -inset-2 w-12 h-12 cursor-pointer" title="自定义颜色面板">
+                </div>
+            </div>
+        </div>
+        
+        <div>
+            <div class="flex justify-between items-center mb-3">
+                <p id="size-control-label" class="text-xs font-semibold text-gray-400 uppercase tracking-wider">调整笔触粗细</p>
+                <span id="size-value" class="text-xs bg-black/60 text-primary font-bold px-2 py-1 rounded font-mono border border-primary/20">3px</span>
+            </div>
+            <input type="range" id="size-control" min="1" max="20" value="3" class="w-full mb-3 cursor-pointer">
+            <div class="flex justify-center items-center h-10 bg-black/40 rounded-xl border border-white/5">
+                <div id="size-preview" class="thickness-preview w-24"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- PPT 图片投影容器 -->
+    <div id="ppt-container" class="absolute inset-0 overflow-hidden bg-[#000]">
+        <div class="ppt-image-container h-full w-full">
+            <img id="ppt-layer1" class="ppt-image-layer active drop-shadow-2xl" src="" alt="幻灯片画面">
+            <img id="ppt-layer2" class="ppt-image-layer inactive drop-shadow-2xl" src="" alt="幻灯片画面">
+            
+            <div id="missing-slide-1" class="missing-slide-indicator">
+                <i class="fa-regular fa-image text-[80px] text-gray-600 mb-6 drop-shadow-md"></i>
+                <p class="text-3xl text-gray-400 font-bold mb-2">未找到该页资源</p>
+                <p class="text-gray-500 text-base">远端路径未响应或文件名配置有误</p>
+            </div>
+            <div id="missing-slide-2" class="missing-slide-indicator">
+                <i class="fa-regular fa-image text-[80px] text-gray-600 mb-6 drop-shadow-md"></i>
+                <p class="text-3xl text-gray-400 font-bold mb-2">未找到该页资源</p>
+                <p class="text-gray-500 text-base">远端路径未响应或文件名配置有误</p>
+            </div>
+        </div>
+        
+        <!-- 高清绘制层 -->
+        <canvas id="drawing-canvas" aria-hidden="true"></canvas>
+        
+        <div id="slide-loading" class="loading-indicator opacity-0 transition-opacity duration-300 pointer-events-none">
+            <div class="sk-chase mb-5">
+                <div class="sk-chase-dot"></div><div class="sk-chase-dot"></div><div class="sk-chase-dot"></div>
+                <div class="sk-chase-dot"></div><div class="sk-chase-dot"></div><div class="sk-chase-dot"></div>
+            </div>
+            <span class="text-white/90 text-sm font-bold tracking-[0.2em] uppercase">载入中...</span>
+        </div>
+    </div>
+
+    <!-- 侧边翻页控制 (沉浸模式下自动隐藏) -->
+    <div class="absolute left-6 top-1/2 -translate-y-1/2 z-30 auto-hide left-controls">
+        <button id="prev-btn" class="control-btn w-12 h-12 lg:w-14 lg:h-14 bg-black/40 hover:bg-black/70 backdrop-blur-md" aria-label="上一页" title="上一页 (← 或 右滑)">
+            <i class="fa fa-chevron-left text-xl lg:text-2xl -ml-1"></i>
+        </button>
+    </div>
+    <div class="absolute right-6 top-1/2 -translate-y-1/2 z-30 auto-hide right-controls">
+        <button id="next-btn" class="control-btn w-12 h-12 lg:w-14 lg:h-14 bg-black/40 hover:bg-black/70 backdrop-blur-md" aria-label="下一页" title="下一页 (→ 或 左滑)">
+            <i class="fa fa-chevron-right text-xl lg:text-2xl -mr-1"></i>
+        </button>
+    </div>
+
+    <!-- 顶部页码指示器 -->
+    <div class="absolute top-6 left-1/2 -translate-x-1/2 z-30 bg-dark/80 text-white px-5 py-2.5 rounded-full text-sm backdrop-blur-md border border-white/10 shadow-xl flex items-center gap-3 auto-hide top-controls font-inter">
+        <input type="number" id="jump-to-page" min="1" value="1" class="w-14 bg-black/50 border border-gray-600 rounded px-2 py-1 text-center text-white text-sm font-bold focus:outline-none focus:border-primary transition-colors" aria-label="跳转到页码" title="输入页码按回车跳转">
+        <span class="text-gray-400 font-medium">/</span>
+        <span id="total-page" class="font-bold w-8">0</span>
+        <div class="w-[1px] h-4 bg-gray-600 mx-1"></div>
+        <button id="jump-btn" class="text-gray-300 hover:text-white transition-colors pulse-on-hover px-2" aria-label="执行跳转" title="跳转">
+            <i class="fa fa-arrow-right"></i>
+        </button>
+    </div>
+
+    <!-- 底部功能工具栏 (沉浸模式下自动隐藏，支持移动端横向滑动) -->
+    <div class="absolute bottom-6 left-1/2 -translate-x-1/2 z-30 max-w-[90vw] overflow-x-auto hide-scrollbar auto-hide">
+        <div class="flex gap-2.5 bg-dark/80 p-2.5 rounded-2xl backdrop-blur-xl border border-white/10 shadow-2xl items-center mx-auto w-max">
+            <button id="pen-toggle" class="tool-btn pulse-on-hover" title="画笔批注模式 (P)" aria-label="画笔">
+                <i class="fa fa-pen text-lg"></i>
+            </button>
+            <button id="eraser-toggle" class="tool-btn pulse-on-hover" title="橡皮擦 (E)" aria-label="橡皮擦">
+                <i class="fa fa-eraser text-lg"></i>
+            </button>
+            <div class="w-[1px] h-6 bg-gray-600/60 mx-1"></div>
+            <button id="undo-btn" class="tool-btn pulse-on-hover" title="撤销 (Ctrl+Z)" aria-label="撤销" disabled>
+                <i class="fa fa-rotate-left text-lg"></i>
+            </button>
+            <button id="redo-btn" class="tool-btn pulse-on-hover" title="重做 (Ctrl+Y)" aria-label="重做" disabled>
+                <i class="fa fa-rotate-right text-lg"></i>
+            </button>
+            <div class="w-[1px] h-6 bg-gray-600/60 mx-1"></div>
+            <button id="brush-settings" class="tool-btn pulse-on-hover" title="调整笔迹粗细与颜色 (S)" aria-label="画笔设置">
+                <i class="fa fa-palette text-lg"></i>
+            </button>
+            <button id="clear-drawing" class="tool-btn pulse-on-hover text-red-400 hover:text-red-300 hover:bg-red-500/20" title="清空当前页面涂鸦 (Ctrl+D)" aria-label="清空">
+                <i class="fa fa-trash-can text-lg"></i>
+            </button>
+            <div class="w-[1px] h-6 bg-gray-600/60 mx-1"></div>
+            <button id="blank-canvas-toggle" class="tool-btn pulse-on-hover text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/20" title="进入纯净白板模式 (B)" aria-label="空白画板">
+                <i class="fa fa-chalkboard text-lg"></i>
+            </button>
+            <button id="fullscreen-toggle" class="tool-btn pulse-on-hover" title="全屏沉浸演示 (Enter)" aria-label="全屏切换">
+                <i class="fa fa-expand text-lg"></i>
+            </button>
+            <button id="config-toggle" class="tool-btn pulse-on-hover" title="远端资源与系统设置" aria-label="设置">
+                <i class="fa fa-gear text-lg"></i>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // --- 沉浸式演示控制 (自动隐藏UI) ---
+        let uiTimeout;
+        const resetUITimeout = () => {
+            document.body.classList.remove('ui-hidden');
+            clearTimeout(uiTimeout);
+            // 只有在非画笔模式，且配置面板关闭时，才进入沉浸模式
+            if (!isPenMode && configPanel.classList.contains('opacity-0')) {
+                uiTimeout = setTimeout(() => {
+                    document.body.classList.add('ui-hidden');
+                }, 3000); // 3秒无操作隐藏
+            }
+        };
+
+        // 解码Base64的辅助函数
+        function decodeBase64Param(paramName) {
+            if (!paramName) return null;
+            try { return decodeURIComponent(escape(atob(paramName))); } 
+            catch (e) {
+                try { return atob(paramName); } catch(err) { return null; }
+            }
+        }
+
+        const prevBtn = document.getElementById('prev-btn');
+        const nextBtn = document.getElementById('next-btn');
+        const penToggle = document.getElementById('pen-toggle');
+        const eraserToggle = document.getElementById('eraser-toggle');
+        const brushSettingsBtn = document.getElementById('brush-settings');
+        const clearDrawing = document.getElementById('clear-drawing');
+        const fullscreenToggle = document.getElementById('fullscreen-toggle');
+        const configToggle = document.getElementById('config-toggle');
+        const configPanel = document.getElementById('config-panel');
+        const saveConfigBtn = document.getElementById('save-config');
+        const imagePathInput = document.getElementById('image-path');
+        const preloadCountSelect = document.getElementById('preload-count');
+        const totalPageSpan = document.getElementById('total-page');
+        
+        const canvas = document.getElementById('drawing-canvas');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        
+        const layer1 = document.getElementById('ppt-layer1');
+        const layer2 = document.getElementById('ppt-layer2');
+        const slideLoading = document.getElementById('slide-loading');
+        const brushPanel = document.getElementById('brush-panel');
+        const colorOptions = document.querySelectorAll('.color-option');
+        const customBrushColor = document.getElementById('custom-brush-color');
+        const sizeControl = document.getElementById('size-control');
+        const sizeValue = document.getElementById('size-value');
+        const sizePreview = document.getElementById('size-preview');
+        const sizeControlLabel = document.getElementById('size-control-label');
+        
+        const blankCanvasToggle = document.getElementById('blank-canvas-toggle');
+        const blankCanvas = document.getElementById('blank-canvas');
+        const blankDrawing = document.getElementById('blank-drawing');
+        const blankCtx = blankDrawing.getContext('2d', { willReadFrequently: true });
+        
+        const undoBtn = document.getElementById('undo-btn');
+        const redoBtn = document.getElementById('redo-btn');
+        const videoPlayBtn = document.getElementById('video-play-btn');
+        const videoContainer = document.getElementById('video-container');
+        const videoPlayer = document.getElementById('video-player');
+        const closeVideoBtn = document.getElementById('close-video');
+        
+        const missingSlide1 = document.getElementById('missing-slide-1');
+        const missingSlide2 = document.getElementById('missing-slide-2');
+        const jumpToPageInput = document.getElementById('jump-to-page');
+        const jumpBtn = document.getElementById('jump-btn');
+        
+        const params = new URLSearchParams(window.location.search);
+        const urlFromParams = decodeBase64Param(params.get('url'));
+        
+        let config = {
+            imageBasePath: urlFromParams || '',
+            preloadRange: 3,
+            loadingShowTime: 200,
+            brushColor: '#FF0000',
+            brushSize: 3,
+            eraserSize: 20,
+            isEraserMode: false,
+        };
+
+        imagePathInput.value = config.imageBasePath;
+
+        let isPenMode = false;
+        let isDrawing = false;
+        let isBlankCanvasActive = false;
+        let isBlankDrawing = false;
+        let lastX = 0, lastY = 0, lastBlankX = 0, lastBlankY = 0;
+        let currentSlide = 1;
+        let totalSlides = 0;
+        let isSwitching = false;
+        let preloadedImages = new Map();
+        let activeLayer = layer1;
+        let inactiveLayer = layer2;
+        let activeMissingIndicator = missingSlide1;
+        let inactiveMissingIndicator = missingSlide2;
+        
+        let slideDrawings = new Map();
+        let blankCanvasData = null;
+        let lastCanvasWidth = 0, lastCanvasHeight = 0;
+        let slideInfo = [];
+        let isCanvasModified = false;
+        let isBlankCanvasModified = false;
+        
+        let history = {
+            slideStates: new Map(),
+            blankStates: [],
+            currentSlideIndex: new Map(),
+            currentBlankIndex: -1,
+            maxHistory: 30
+        };
+
+        let resizeTimeout;
+        function resizeCanvasDebounced() {
+            clearTimeout(resizeTimeout);
+            resizeTimeout = setTimeout(resizeCanvas, 150);
+        }
+
+        // --- 核心优化：Retina 高清视网膜屏幕适配 ---
+        function resizeCanvas() {
+            // 获取设备的物理像素分辨率比例
+            const dpr = window.devicePixelRatio || 1;
+            
+            // 逻辑像素尺寸 (CSS像素)
+            const cssWidth = window.innerWidth;
+            const cssHeight = window.innerHeight;
+            
+            canvas.style.width = `${cssWidth}px`;
+            canvas.style.height = `${cssHeight}px`;
+            blankDrawing.style.width = `${cssWidth}px`;
+            blankDrawing.style.height = `${cssHeight}px`;
+            
+            // 物理像素尺寸 (Canvas实际内存占用)
+            canvas.width = cssWidth * dpr;
+            canvas.height = cssHeight * dpr;
+            blankDrawing.width = cssWidth * dpr;
+            blankDrawing.height = cssHeight * dpr;
+            
+            // 缩放上下文，使得代码中的 1px = CSS的 1px
+            ctx.scale(dpr, dpr);
+            blankCtx.scale(dpr, dpr);
+            
+            applyToolStyles();
+            
+            // 尺寸变化后，重绘已有笔迹。需要强制标记 sizeChanged
+            redrawCurrentSlideAnnotations(true);
+            redrawBlankCanvas(true);
+            
+            lastCanvasWidth = cssWidth;
+            lastCanvasHeight = cssHeight;
+        }
+
+        function applyToolStyles() {
+            const configureCtx = (context) => {
+                if (config.isEraserMode) {
+                    context.globalCompositeOperation = 'destination-out';
+                    context.lineWidth = config.eraserSize;
+                } else {
+                    context.globalCompositeOperation = 'source-over';
+                    context.strokeStyle = config.brushColor;
+                    context.lineWidth = config.brushSize;
+                }
+                context.lineCap = 'round';
+                context.lineJoin = 'round';
+            };
+            configureCtx(ctx);
+            configureCtx(blankCtx);
+            updateSizePreview();
+        }
+
+        function updateSizePreview() {
+            if (config.isEraserMode) {
+                sizeValue.textContent = `${config.eraserSize}px`;
+                sizeControl.value = config.eraserSize;
+                sizeControl.max = 50;
+                sizePreview.className = 'eraser-preview';
+                sizePreview.style.width = `${config.eraserSize}px`;
+                sizePreview.style.height = `${config.eraserSize}px`;
+                sizePreview.style.backgroundColor = 'transparent';
+                sizeControlLabel.textContent = '橡皮擦大小';
+            } else {
+                sizeValue.textContent = `${config.brushSize}px`;
+                sizeControl.value = config.brushSize;
+                sizeControl.max = 20;
+                sizePreview.className = 'thickness-preview w-24';
+                sizePreview.style.height = `${config.brushSize}px`;
+                sizePreview.style.width = '6rem';
+                sizePreview.style.backgroundColor = config.brushColor;
+                sizeControlLabel.textContent = '画笔粗细';
+            }
+        }
+
+        function showError(message, type="error") {
+            const msgDiv = document.createElement('div');
+            const bgClass = type === 'success' ? 'bg-emerald-500' : 'bg-red-500';
+            const icon = type === 'success' ? 'fa-check-circle' : 'fa-circle-exclamation';
+            
+            msgDiv.className = `fixed top-6 left-1/2 -translate-x-1/2 ${bgClass} text-white px-5 py-3 rounded-xl z-50 shadow-2xl font-inter flex items-center gap-2 tracking-wide font-medium backdrop-blur-sm bg-opacity-90`;
+            msgDiv.innerHTML = `<i class="fa ${icon} text-lg"></i> <span>${message}</span>`;
+            document.body.appendChild(msgDiv);
+            
+            msgDiv.animate([
+                { opacity: 0, transform: 'translate(-50%, -20px) scale(0.9)' },
+                { opacity: 1, transform: 'translate(-50%, 0) scale(1)' }
+            ], { duration: 400, easing: 'cubic-bezier(0.175, 0.885, 0.32, 1.275)', fill: 'forwards' });
+            
+            setTimeout(() => {
+                const animation = msgDiv.animate([
+                    { opacity: 1, transform: 'translate(-50%, 0)' },
+                    { opacity: 0, transform: 'translate(-50%, -10px)' }
+                ], { duration: 200, easing: 'ease-in', fill: 'forwards' });
+                animation.onfinish = () => msgDiv.remove();
+            }, 3000);
+        }
+
+        function getBaseUrl() {
+            return config.imageBasePath.endsWith('/') ? config.imageBasePath : `${config.imageBasePath}/`;
+        }
+
+        function getImageUrl(slideNum) {
+            if (slideNum < 1 || slideNum > slideInfo.length) return null;
+            return `${getBaseUrl()}${slideInfo[slideNum - 1].imageName}`;
+        }
+
+        function getVideoUrl(slideNum) {
+            if (slideNum < 1 || slideNum > slideInfo.length) return null;
+            const videoName = slideInfo[slideNum - 1].videoName;
+            return videoName ? `${getBaseUrl()}${videoName}` : null;
+        }
+
+        async function fetchSlideInfo() {
+            try {
+                let imgsTxtUrl = config.imageBasePath ? `${getBaseUrl()}imgs.txt` : 'imgs.txt';
+                const response = await fetch(imgsTxtUrl, { cache: "no-store" });
+                
+                if (!response.ok) throw new Error(`加载配置失败 (${response.status})`);
+                
+                const text = await response.text();
+                const lines = text.split('\n').map(line => line.trim()).filter(line => line);
+                
+                if (lines.length < 1) throw new Error('配置文件格式错误，缺少页码总数');
+                
+                totalSlides = parseInt(lines[0], 10);
+                if (isNaN(totalSlides) || totalSlides <= 0) throw new Error('总页数无效');
+                if (lines.length - 1 < totalSlides) throw new Error(`配置不完整: 需 ${totalSlides} 页，实有 ${lines.length - 1} 页`);
+                
+                slideInfo = [];
+                for (let i = 1; i <= totalSlides; i++) {
+                    const parts = lines[i].split('|').map(part => part.trim());
+                    slideInfo.push({ imageName: parts[0], videoName: parts.length > 1 ? parts[1] : null });
+                }
+                return true;
+            } catch (error) {
+                console.error('Info fetching error:', error);
+                showError(error.message);
+                return false;
+            }
+        }
+
+        async function preloadSlide(slideNum) {
+            if (preloadedImages.has(slideNum)) return;
+            return new Promise((resolve) => {
+                const imgUrl = getImageUrl(slideNum);
+                if (!imgUrl) return resolve();
+
+                const img = new Image();
+                img.crossOrigin = 'anonymous';
+                img.src = imgUrl;
+                img.onload = () => { preloadedImages.set(slideNum, img); resolve(); };
+                img.onerror = () => resolve();
+                setTimeout(() => resolve(), 4000);
+            });
+        }
+
+        async function batchPreload(currentNum) {
+            const start = Math.max(1, currentNum - config.preloadRange);
+            const end = Math.min(totalSlides, currentNum + config.preloadRange);
+            const promises = [];
+            for (let i = start; i <= end; i++) {
+                if (!preloadedImages.has(i)) promises.push(preloadSlide(i));
+            }
+            await Promise.all(promises);
+        }
+
+        function switchLayers() {
+            [activeLayer, inactiveLayer] = [inactiveLayer, activeLayer];
+            [activeMissingIndicator, inactiveMissingIndicator] = [inactiveMissingIndicator, activeMissingIndicator];
+            
+            activeLayer.classList.add('active'); activeLayer.classList.remove('inactive');
+            inactiveLayer.classList.add('inactive'); inactiveLayer.classList.remove('active');
+            
+            inactiveMissingIndicator.style.opacity = '0'; inactiveMissingIndicator.style.pointerEvents = 'none';
+        }
+
+        function updateVideoButton() {
+            const videoUrl = getVideoUrl(currentSlide);
+            if (videoUrl && !isBlankCanvasActive) videoPlayBtn.classList.add('visible');
+            else videoPlayBtn.classList.remove('visible');
+        }
+
+        function playVideo() {
+            const videoUrl = getVideoUrl(currentSlide);
+            if (!videoUrl) return;
+            videoPlayer.src = videoUrl;
+            videoPlayer.load();
+            videoPlayer.play().catch(err => showError(`视频播放被浏览器策略阻止`));
+            videoContainer.classList.add('active');
+            
+            if (isPenMode) togglePenMode();
+        }
+
+        function closeVideo() {
+            videoPlayer.pause();
+            videoContainer.classList.remove('active');
+        }
+
+        // 保存高分屏图需注意，toDataURL()会输出真实物理像素图
+        function saveCurrentDrawing() {
+            if (!isBlankCanvasActive && canvas.width > 0) {
+                const dataUrl = canvas.toDataURL('image/png');
+                const states = history.slideStates.get(currentSlide) || [];
+                const currentIndex = history.currentSlideIndex.get(currentSlide) || -1;
+                if (currentIndex >= 0 && states[currentIndex] === dataUrl) return;
+                
+                slideDrawings.set(currentSlide, dataUrl);
+                saveToHistory(currentSlide, dataUrl);
+            }
+        }
+
+        function saveBlankCanvasDrawing() {
+            if (isBlankCanvasActive && blankDrawing.width > 0) {
+                const dataUrl = blankDrawing.toDataURL('image/png');
+                if (history.currentBlankIndex >= 0 && history.blankStates[history.currentBlankIndex] === dataUrl) return;
+                
+                blankCanvasData = dataUrl;
+                saveBlankToHistory(dataUrl);
+            }
+        }
+
+        function saveToHistory(slideNum, dataUrl) {
+            if (!history.slideStates.has(slideNum)) {
+                history.slideStates.set(slideNum, [getEmptyCanvasDataUrl(canvas)]);
+                history.currentSlideIndex.set(slideNum, 0);
+            }
+            const states = history.slideStates.get(slideNum);
+            let currentIndex = history.currentSlideIndex.get(slideNum) || 0;
+            
+            if (currentIndex < states.length - 1) states.splice(currentIndex + 1);
+            states.push(dataUrl);
+            if (states.length > history.maxHistory) { states.shift(); currentIndex--; }
+            
+            history.currentSlideIndex.set(slideNum, states.length - 1);
+            updateHistoryButtons();
+        }
+
+        function saveBlankToHistory(dataUrl) {
+            const states = history.blankStates;
+            if (states.length === 0) {
+                states.push(getEmptyCanvasDataUrl(blankDrawing));
+                history.currentBlankIndex = 0;
+            }
+            let currentIndex = history.currentBlankIndex;
+            
+            if (currentIndex < states.length - 1) states.splice(currentIndex + 1);
+            states.push(dataUrl);
+            if (states.length > history.maxHistory) { states.shift(); currentIndex--; }
+            
+            history.currentBlankIndex = states.length - 1;
+            updateHistoryButtons();
+        }
+
+        let emptyCanvasCache = new Map();
+        function getEmptyCanvasDataUrl(targetCanvas) {
+            const key = `${targetCanvas.width}x${targetCanvas.height}`;
+            if (emptyCanvasCache.has(key)) return emptyCanvasCache.get(key);
+            
+            const temp = document.createElement('canvas');
+            temp.width = targetCanvas.width; temp.height = targetCanvas.height;
+            const res = temp.toDataURL();
+            emptyCanvasCache.set(key, res);
+            return res;
+        }
+
+        function updateHistoryButtons() {
+            if (isBlankCanvasActive) {
+                const hasStates = history.blankStates.length > 0;
+                undoBtn.disabled = !hasStates || history.currentBlankIndex <= 0;
+                redoBtn.disabled = !hasStates || history.currentBlankIndex >= history.blankStates.length - 1;
+            } else {
+                const states = history.slideStates.get(currentSlide) || [];
+                const currentIndex = history.currentSlideIndex.get(currentSlide) || 0;
+                undoBtn.disabled = states.length <= 1 || currentIndex <= 0;
+                redoBtn.disabled = currentIndex >= states.length - 1;
+            }
+        }
+
+        function undo() {
+            if (isBlankCanvasActive) {
+                if (history.currentBlankIndex <= 0) return;
+                history.currentBlankIndex--;
+                blankCanvasData = history.blankStates[history.currentBlankIndex];
+                redrawBlankCanvas(true);
+            } else {
+                const states = history.slideStates.get(currentSlide);
+                let currentIndex = history.currentSlideIndex.get(currentSlide) || 0;
+                if (!states || currentIndex <= 0) return;
+                currentIndex--;
+                history.currentSlideIndex.set(currentSlide, currentIndex);
+                slideDrawings.set(currentSlide, states[currentIndex]);
+                redrawCurrentSlideAnnotations(true);
+            }
+            updateHistoryButtons();
+        }
+
+        function redo() {
+            if (isBlankCanvasActive) {
+                if (history.currentBlankIndex >= history.blankStates.length - 1) return;
+                history.currentBlankIndex++;
+                blankCanvasData = history.blankStates[history.currentBlankIndex];
+                redrawBlankCanvas(true);
+            } else {
+                const states = history.slideStates.get(currentSlide);
+                let currentIndex = history.currentSlideIndex.get(currentSlide) || 0;
+                if (!states || currentIndex >= states.length - 1) return;
+                currentIndex++;
+                history.currentSlideIndex.set(currentSlide, currentIndex);
+                slideDrawings.set(currentSlide, states[currentIndex]);
+                redrawCurrentSlideAnnotations(true);
+            }
+            updateHistoryButtons();
+        }
+
+        // 恢复图片需考虑视网膜物理像素到CSS逻辑像素的映射
+        function redrawCurrentSlideAnnotations(forceRedraw = false) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height); // 因为有scale，所以clearRect需覆盖足够面积，由于CSS宽高与物理宽高比例已设好，通常传极大值更保险。此处依靠scale机制自动转换。
+            // 修正clearRect在scale下：
+            const cssW = window.innerWidth;
+            const cssH = window.innerHeight;
+            ctx.clearRect(0, 0, cssW, cssH);
+
+            if (slideDrawings.has(currentSlide)) {
+                const img = new Image();
+                img.onload = () => {
+                    // 利用 drawImage(image, x, y, width, height) 映射回全屏 CSS 尺寸
+                    ctx.drawImage(img, 0, 0, cssW, cssH);
+                };
+                img.src = slideDrawings.get(currentSlide);
+            }
+        }
+
+        function redrawBlankCanvas(forceRedraw = false) {
+            const cssW = window.innerWidth;
+            const cssH = window.innerHeight;
+            blankCtx.clearRect(0, 0, cssW, cssH);
+
+            if (blankCanvasData) {
+                const img = new Image();
+                img.onload = () => {
+                    blankCtx.drawImage(img, 0, 0, cssW, cssH);
+                };
+                img.src = blankCanvasData;
+            }
+        }
+
+        async function updateSlide(targetSlide) {
+            if (isSwitching || targetSlide < 1 || targetSlide > totalSlides || targetSlide === currentSlide) return;
+            isSwitching = true;
+
+            saveCurrentDrawing();
+            slideLoading.style.opacity = '1';
+            
+            try {
+                await batchPreload(targetSlide);
+                if (!preloadedImages.has(targetSlide)) {
+                    inactiveLayer.src = '';
+                    inactiveMissingIndicator.style.opacity = '1';
+                    inactiveMissingIndicator.style.pointerEvents = 'auto';
+                } else {
+                    inactiveLayer.src = preloadedImages.get(targetSlide).src;
+                    inactiveMissingIndicator.style.opacity = '0';
+                    inactiveMissingIndicator.style.pointerEvents = 'none';
+                }
+
+                if (preloadedImages.has(targetSlide)) {
+                    await new Promise((resolve) => {
+                        if (inactiveLayer.complete) resolve();
+                        else { inactiveLayer.onload = resolve; inactiveLayer.onerror = resolve; }
+                    });
+                }
+
+                switchLayers();
+                currentSlide = targetSlide;
+                jumpToPageInput.value = currentSlide;
+
+                const keepStart = Math.max(1, currentSlide - config.preloadRange);
+                const keepEnd = Math.min(totalSlides, currentSlide + config.preloadRange);
+                for (const [slideNum] of preloadedImages) {
+                    if (slideNum < keepStart || slideNum > keepEnd) preloadedImages.delete(slideNum);
+                }
+
+                setTimeout(() => {
+                    redrawCurrentSlideAnnotations(true);
+                    updateHistoryButtons();
+                    updateVideoButton();
+                }, 50);
+
+            } catch (error) {
+                showError(`载入第 ${targetSlide} 页时发生错误`);
+            } finally {
+                setTimeout(() => {
+                    slideLoading.style.opacity = '0';
+                    isSwitching = false;
+                }, config.loadingShowTime);
+            }
+        }
+
+        function jumpToSlide() {
+            if (isPenMode) return;
+            const targetPage = parseInt(jumpToPageInput.value);
+            if (isNaN(targetPage) || targetPage < 1 || targetPage > totalSlides) {
+                showError(`仅支持跳转 1 至 ${totalSlides} 页`);
+                jumpToPageInput.value = currentSlide;
+                return;
+            }
+            if (targetPage !== currentSlide) updateSlide(targetPage);
+        }
+
+        async function init() {
+            resizeCanvas();
+            totalPageSpan.textContent = '-';
+
+            try {
+                const success = await fetchSlideInfo();
+                if (!success) { totalPageSpan.textContent = '0'; return; }
+                
+                totalPageSpan.textContent = totalSlides;
+                jumpToPageInput.max = totalSlides;
+
+                await batchPreload(1);
+
+                if (preloadedImages.has(1)) {
+                    activeLayer.src = preloadedImages.get(1).src;
+                    activeMissingIndicator.style.opacity = '0';
+                } else {
+                    activeLayer.src = '';
+                    activeMissingIndicator.style.opacity = '1';
+                }
+
+                history.slideStates.set(1, [getEmptyCanvasDataUrl(canvas)]);
+                history.currentSlideIndex.set(1, 0);
+                
+                history.blankStates = [getEmptyCanvasDataUrl(blankDrawing)];
+                history.currentBlankIndex = 0;
+                
+                updateVideoButton();
+
+            } catch (error) {
+                showError(error.message);
+                totalPageSpan.textContent = '0';
+            }
+
+            window.addEventListener('resize', resizeCanvasDebounced);
+            document.addEventListener('fullscreenchange', handleFullscreenChange);
+            applyToolStyles();
+            updateHistoryButtons();
+            
+            // 初始化沉浸模式
+            resetUITimeout();
+        }
+
+        function handleFullscreenChange() {
+            if (!isBlankCanvasActive) saveCurrentDrawing();
+            else saveBlankCanvasDrawing();
+            
+            resizeCanvas();
+            fullscreenToggle.innerHTML = document.fullscreenElement ? '<i class="fa fa-compress text-lg"></i>' : '<i class="fa fa-expand text-lg"></i>';
+        }
+
+        function goToPreviousSlide() { if (!isBlankCanvasActive && currentSlide > 1) updateSlide(currentSlide - 1); }
+        function goToNextSlide() { if (!isBlankCanvasActive && currentSlide < totalSlides) updateSlide(currentSlide + 1); }
+
+        function togglePenMode() {
+            if (isPenMode && !config.isEraserMode) {
+                isPenMode = false;
+                penToggle.classList.remove('active');
+                canvas.style.pointerEvents = 'none'; blankDrawing.style.pointerEvents = 'none';
+                document.body.style.cursor = 'default';
+                resetUITimeout(); // 退出时重新激活隐藏逻辑
+                return;
+            }
+            
+            isPenMode = true; config.isEraserMode = false;
+            penToggle.classList.add('active'); eraserToggle.classList.remove('active');
+            
+            if (isBlankCanvasActive) blankDrawing.style.pointerEvents = 'auto';
+            else canvas.style.pointerEvents = 'auto';
+            
+            document.body.style.cursor = 'crosshair';
+            applyToolStyles();
+            hideConfigPanel();
+            
+            // 画笔模式强制显示UI
+            document.body.classList.remove('ui-hidden');
+            clearTimeout(uiTimeout);
+        }
+
+        function toggleEraserMode() {
+            if (isPenMode && config.isEraserMode) {
+                isPenMode = false;
+                eraserToggle.classList.remove('active');
+                canvas.style.pointerEvents = 'none'; blankDrawing.style.pointerEvents = 'none';
+                document.body.style.cursor = 'default';
+                resetUITimeout();
+                return;
+            }
+            
+            isPenMode = true; config.isEraserMode = true;
+            eraserToggle.classList.add('active'); penToggle.classList.remove('active');
+            
+            if (isBlankCanvasActive) blankDrawing.style.pointerEvents = 'auto';
+            else canvas.style.pointerEvents = 'auto';
+            
+            document.body.style.cursor = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3C/svg%3E") 12 12, auto`;
+            
+            applyToolStyles();
+            hideConfigPanel();
+            document.body.classList.remove('ui-hidden');
+            clearTimeout(uiTimeout);
+        }
+
+        function toggleBrushPanel() { 
+            brushPanel.classList.toggle('hidden'); 
+            resetUITimeout();
+        }
+
+        function clearAllDrawing() {
+            const cssW = window.innerWidth;
+            const cssH = window.innerHeight;
+            if (isBlankCanvasActive) {
+                blankCtx.clearRect(0, 0, cssW, cssH);
+                const emptyState = getEmptyCanvasDataUrl(blankDrawing);
+                blankCanvasData = emptyState;
+                history.blankStates = [emptyState];
+                history.currentBlankIndex = 0;
+            } else {
+                ctx.clearRect(0, 0, cssW, cssH);
+                const emptyState = getEmptyCanvasDataUrl(canvas);
+                slideDrawings.set(currentSlide, emptyState);
+                history.slideStates.set(currentSlide, [emptyState]);
+                history.currentSlideIndex.set(currentSlide, 0);
+            }
+            updateHistoryButtons();
+            
+            // 增加清空时的反馈闪烁
+            const target = isBlankCanvasActive ? blankCanvas : canvas;
+            target.animate([{opacity: 0.5}, {opacity: 1}], {duration: 300});
+        }
+
+        function toggleFullscreen() {
+            if (!isBlankCanvasActive) saveCurrentDrawing();
+            else saveBlankCanvasDrawing();
+            
+            if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(err => console.log(err));
+            else if (document.exitFullscreen) document.exitFullscreen();
+        }
+
+        function toggleConfigPanel() {
+            if (configPanel.classList.contains('opacity-0')) {
+                configPanel.classList.remove('opacity-0', 'translate-y-2');
+                configPanel.style.pointerEvents = 'auto';
+                document.body.classList.remove('ui-hidden');
+                clearTimeout(uiTimeout);
+            } else {
+                hideConfigPanel();
+                resetUITimeout();
+            }
+        }
+        
+        function hideConfigPanel() {
+            configPanel.classList.add('opacity-0', 'translate-y-2');
+            configPanel.style.pointerEvents = 'none';
+        }
+
+        function changeBrushColor(color) {
+            config.brushColor = color;
+            customBrushColor.value = color;
+            colorOptions.forEach(opt => opt.classList.toggle('selected', opt.dataset.color === color));
+            applyToolStyles();
+        }
+
+        function toggleBlankCanvas() {
+            if (isPenMode) {
+                if (isBlankCanvasActive) saveBlankCanvasDrawing();
+                else saveCurrentDrawing();
+            }
+            
+            isBlankCanvasActive = !isBlankCanvasActive;
+            blankCanvasToggle.classList.toggle('active', isBlankCanvasActive);
+            
+            if (isBlankCanvasActive) {
+                blankCanvas.classList.add('active'); blankDrawing.classList.add('active');
+                videoPlayBtn.classList.remove('visible');
+                if (isPenMode) { canvas.style.pointerEvents = 'none'; blankDrawing.style.pointerEvents = 'auto'; }
+            } else {
+                blankCanvas.classList.remove('active'); blankDrawing.classList.remove('active');
+                updateVideoButton();
+                if (isPenMode) { blankDrawing.style.pointerEvents = 'none'; canvas.style.pointerEvents = 'auto'; }
+            }
+            updateHistoryButtons();
+            resetUITimeout();
+        }
+
+        async function saveConfig() {
+            if (!isBlankCanvasActive) saveCurrentDrawing();
+            else saveBlankCanvasDrawing();
+            
+            config.imageBasePath = imagePathInput.value.trim() || 'https://example.com/ppt-imgs/';
+            config.preloadRange = parseInt(preloadCountSelect.value);
+
+            preloadedImages.clear(); slideInfo = []; currentSlide = 1; totalSlides = 0;
+            totalPageSpan.textContent = '...'; activeLayer.src = ''; inactiveLayer.src = '';
+            jumpToPageInput.value = 1; jumpToPageInput.max = '';
+            activeMissingIndicator.style.opacity = '0'; inactiveMissingIndicator.style.opacity = '0';
+            videoPlayBtn.classList.remove('visible');
+
+            await init();
+            showError('资源配置更新完毕，已重新加载', 'success');
+            hideConfigPanel();
+        }
+
+        function isPointInImageArea(x, y) {
+            const rect = activeLayer.getBoundingClientRect();
+            const padding = 30; // 放宽容差边缘
+            return (x >= rect.left - padding && x <= rect.right + padding && y >= rect.top - padding && y <= rect.bottom + padding);
+        }
+
+        function getCoordinates(e, returnScreenCoords = false) {
+            const targetCanvas = isBlankCanvasActive ? blankDrawing : canvas;
+            const rect = targetCanvas.getBoundingClientRect();
+            const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+            const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
+            if (returnScreenCoords) return [clientX, clientY];
+            // 返回 CSS 逻辑坐标即可，ctx.scale 会接管与物理分辨率的映射
+            return [clientX - rect.left, clientY - rect.top];
+        }
+
+        function handleConfigPanelDrawing(e) {
+            if (!isPenMode) return;
+            if (e.target.closest('#config-panel') || e.target.closest('#brush-panel')) {
+                isDrawing = false; isBlankDrawing = false; return;
+            }
+            
+            const isTouch = e.type.includes('touch');
+            const type = isTouch ? e.type.replace('touch', '') : e.type.replace('mouse', '');
+            
+            if (isBlankCanvasActive) {
+                if (type === 'down' || type === 'start') {
+                    isBlankDrawing = true; isBlankCanvasModified = false;
+                    [lastBlankX, lastBlankY] = getCoordinates(e);
+                } else if ((type === 'move') && isBlankDrawing) {
+                    const [x, y] = getCoordinates(e);
+                    blankCtx.beginPath(); blankCtx.moveTo(lastBlankX, lastBlankY); blankCtx.lineTo(x, y); blankCtx.stroke();
+                    [lastBlankX, lastBlankY] = [x, y];
+                    isBlankCanvasModified = true;
+                } else if (type === 'up' || type === 'end' || e.type === 'mouseout') {
+                    if (isBlankDrawing) {
+                        isBlankDrawing = false;
+                        if (isBlankCanvasModified) saveBlankCanvasDrawing();
+                    }
+                }
+            } else {
+                if (type === 'down' || type === 'start') {
+                    const [screenX, screenY] = getCoordinates(e, true);
+                    if (isPointInImageArea(screenX, screenY)) {
+                        isDrawing = true; isCanvasModified = false;
+                        [lastX, lastY] = getCoordinates(e);
+                    }
+                } else if ((type === 'move') && isDrawing) {
+                    const [screenX, screenY] = getCoordinates(e, true);
+                    if (!isPointInImageArea(screenX, screenY)) {
+                        isDrawing = false;
+                        if(isCanvasModified) saveCurrentDrawing();
+                        return;
+                    }
+                    const [x, y] = getCoordinates(e);
+                    ctx.beginPath(); ctx.moveTo(lastX, lastY); ctx.lineTo(x, y); ctx.stroke();
+                    [lastX, lastY] = [x, y];
+                    isCanvasModified = true;
+                } else if (type === 'up' || type === 'end' || e.type === 'mouseout') {
+                    if (isDrawing) {
+                        isDrawing = false;
+                        if (isCanvasModified) saveCurrentDrawing();
+                    }
+                }
+            }
+        }
+
+        // --- 核心优化：移动端手势滑动翻页 ---
+        let touchStartX = 0;
+        let touchEndX = 0;
+        document.addEventListener('touchstart', e => { 
+            resetUITimeout();
+            touchStartX = e.changedTouches[0].screenX; 
+        }, {passive: true});
+        
+        document.addEventListener('touchend', e => {
+            resetUITimeout();
+            touchEndX = e.changedTouches[0].screenX;
+            if (!isPenMode && !isBlankCanvasActive && !videoContainer.classList.contains('active')) {
+                const threshold = 60; // 降低防误触灵敏度
+                if (touchEndX < touchStartX - threshold) goToNextSlide();     // 左滑
+                else if (touchEndX > touchStartX + threshold) goToPreviousSlide(); // 右滑
+            }
+        }, {passive: true});
+
+        function handleScreenClick(e) {
+            if (isPenMode || isBlankCanvasActive || isSwitching) return;
+            if (e.target.closest('button') || e.target.closest('#config-panel') || e.target.closest('#brush-panel') || e.target.closest('.video-container') || e.target.closest('input')) return;
+            
+            const clickX = e.clientX;
+            // 去除点击翻页（防止与触屏手势冲突），只保留边缘 1/5 区域可点
+            const edgeWidth = window.innerWidth / 5;
+            if (clickX < edgeWidth) goToPreviousSlide();
+            else if (clickX > window.innerWidth - edgeWidth) goToNextSlide();
+        }
+
+        function handleMouseWheel(e) {
+            resetUITimeout();
+            if (isSwitching || isPenMode || isBlankCanvasActive || videoContainer.classList.contains('active')) return;
+            e.preventDefault();
+            if (e.deltaY < 0) goToPreviousSlide();
+            else goToNextSlide();
+        }
+
+        function handleKeyDown(e) {
+            resetUITimeout();
+            if (videoContainer.classList.contains('active')) {
+                if (e.key === 'Escape') closeVideo();
+                return;
+            }
+            if (isSwitching) return;
+            if (document.activeElement === jumpToPageInput) {
+                if (e.key === 'Enter') jumpToSlide();
+                return;
+            }
+            
+            if (e.ctrlKey || e.metaKey) {
+                if (e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); return; }
+                if (e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); return; }
+                if (e.key.toLowerCase() === 'd') { e.preventDefault(); clearAllDrawing(); return; }
+            }
+            
+            if (isBlankCanvasActive) {
+                if (e.key === 'Escape') toggleBlankCanvas();
+                return;
+            }
+            
+            switch (e.key) {
+                case 'ArrowLeft': case 'PageUp': goToPreviousSlide(); break;
+                case 'ArrowRight': case 'PageDown': case ' ': goToNextSlide(); break;
+                case 'Enter': toggleFullscreen(); break;
+                case 'Escape':
+                    if (document.fullscreenElement) document.exitFullscreen();
+                    hideConfigPanel(); brushPanel.classList.add('hidden');
+                    if (isPenMode) togglePenMode();
+                    break;
+                case 'b': case 'B': toggleBlankCanvas(); break;
+                case 'p': case 'P': togglePenMode(); break;
+                case 'e': case 'E': toggleEraserMode(); break;
+                case 's': case 'S': toggleBrushPanel(); break;
+                case 'v': case 'V': playVideo(); break;
+            }
+        }
+
+        // 事件绑定
+        undoBtn.addEventListener('click', undo); redoBtn.addEventListener('click', redo);
+        prevBtn.addEventListener('click', goToPreviousSlide); nextBtn.addEventListener('click', goToNextSlide);
+        penToggle.addEventListener('click', togglePenMode); eraserToggle.addEventListener('click', toggleEraserMode);
+        brushSettingsBtn.addEventListener('click', toggleBrushPanel); clearDrawing.addEventListener('click', clearAllDrawing);
+        fullscreenToggle.addEventListener('click', toggleFullscreen); configToggle.addEventListener('click', toggleConfigPanel);
+        saveConfigBtn.addEventListener('click', saveConfig); blankCanvasToggle.addEventListener('click', toggleBlankCanvas);
+        videoPlayBtn.addEventListener('click', playVideo); closeVideoBtn.addEventListener('click', closeVideo);
+        
+        colorOptions.forEach(opt => opt.addEventListener('click', () => changeBrushColor(opt.dataset.color)));
+        customBrushColor.addEventListener('input', (e) => changeBrushColor(e.target.value));
+        sizeControl.addEventListener('input', (e) => {
+            config[config.isEraserMode ? 'eraserSize' : 'brushSize'] = parseInt(e.target.value);
+            applyToolStyles();
+        });
+        
+        jumpBtn.addEventListener('click', jumpToSlide);
+        
+        const bindDrawEvents = (el) => {
+            el.addEventListener('mousedown', handleConfigPanelDrawing);
+            el.addEventListener('mousemove', handleConfigPanelDrawing);
+            el.addEventListener('mouseup', handleConfigPanelDrawing);
+            el.addEventListener('mouseout', handleConfigPanelDrawing);
+            el.addEventListener('touchstart', (e) => { e.preventDefault(); handleConfigPanelDrawing(e); }, { passive: false });
+            el.addEventListener('touchmove', (e) => { e.preventDefault(); handleConfigPanelDrawing(e); }, { passive: false });
+            el.addEventListener('touchend', (e) => { e.preventDefault(); handleConfigPanelDrawing(e); }, { passive: false });
+        };
+        bindDrawEvents(canvas); bindDrawEvents(blankDrawing);
+        
+        document.addEventListener('click', handleScreenClick);
+        document.addEventListener('wheel', handleMouseWheel, { passive: false });
+        document.addEventListener('keydown', handleKeyDown);
+        document.addEventListener('mousemove', resetUITimeout); // 鼠标移动重置隐藏倒计时
+        
+        window.addEventListener('blur', () => { if (!isBlankCanvasActive) saveCurrentDrawing(); else saveBlankCanvasDrawing(); });
+        window.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
